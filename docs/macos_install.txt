@@ -6,3 +6,4 @@ Cursor
 iterm2
 python 3.14
 MacWhisper (aka )
+Docker Desktop

@@ -1,0 +1,84 @@
+services:
+  core:
+    build:
+      context: .
+      dockerfile: services/core/Dockerfile
+    env_file: [.env]
+    environment:
+      JARVIS_CONNECTORS_URL: http://connectors-google:8000
+      JARVIS_SCHEDULER_URL: http://scheduler:8000
+    ports: ["8001:8000"]
+    networks: [internal]
+    depends_on: [postgres, redis, policy, connectors-google, scheduler]
+
+  alexa-ingress:
+    build:
+      context: .
+      dockerfile: services/alexa_ingress/Dockerfile
+    env_file: [.env]
+    environment:
+      JARVIS_CORE_URL: http://core:8000
+      JARVIS_ALEXA_SKIP_VERIFY: ${JARVIS_ALEXA_SKIP_VERIFY:-0}
+    ports: ["8002:8000"]
+    networks: [internal, public]
+    depends_on: [core]
+
+  policy:
+    build:
+      context: .
+      dockerfile: services/policy/Dockerfile
+    env_file: [.env]
+    ports: ["8003:8000"]
+    networks: [internal]
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: services/scheduler/Dockerfile
+    env_file: [.env]
+    ports: ["8004:8000"]
+    networks: [internal]
+
+  connectors-google:
+    build:
+      context: .
+      dockerfile: services/connectors_google/Dockerfile
+    env_file: [.env]
+    ports: ["8005:8000"]
+    networks: [internal]
+
+  web:
+    build:
+      context: .
+      dockerfile: services/web/Dockerfile
+    env_file: [.env]
+    environment:
+      JARVIS_CORE_URL: http://core:8000
+      JARVIS_CONNECTORS_URL: http://connectors-google:8000
+      JARVIS_SCHEDULER_URL: http://scheduler:8000
+    ports: ["8006:8000"]
+    networks: [internal]
+    depends_on: [core, connectors-google]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jarvis}
+      POSTGRES_USER: ${POSTGRES_USER:-jarvis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jarvis}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    volumes: [redis_data:/data]
+    networks: [internal]
+
+networks:
+  internal:
+    internal: true
+  public:
+
+volumes:
+  postgres_data:
+  redis_data:
