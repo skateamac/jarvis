@@ -1,0 +1,6 @@
+1. Install OLLaMa
+curl -fsSL https://ollama.com/install.sh | sh
+# to run model
+ollama run gemma3:27b 
+
+2. Install MLX

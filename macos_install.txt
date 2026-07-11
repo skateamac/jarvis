@@ -1,0 +1,8 @@
+# install the following software
+Chrome
+NordPass extension & NordPass app
+VS Code
+Cursor
+iterm2
+python 3.14
+MacWhisper (aka )
