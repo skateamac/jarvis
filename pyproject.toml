@@ -8,12 +8,14 @@ version = "0.1.0"
 description = "Jarvis local-first family assistant scaffold"
 requires-python = ">=3.14"
 dependencies = [
+  "cryptography>=43.0.0",
   "fastapi==0.115.0",
-  "uvicorn[standard]==0.32.0",
+  "httpx2>=2.5.0",
+  "psycopg[binary]>=3.2.0",
   "pydantic==2.12.0",
   "python-dotenv==1.0.1",
   "typing-extensions>=4.12.0",
-  "httpx2>=2.5.0",
+  "uvicorn[standard]==0.32.0",
 ]
 
 [project.optional-dependencies]
@@ -32,7 +34,7 @@ addopts = "--cov-fail-under=100"
 include = ["services*", "shared*"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint]
@@ -42,3 +44,8 @@ select = ["E", "F", "I"]
 quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.2",
+]

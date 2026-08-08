@@ -30,7 +30,7 @@ from shared.jarvis_common.clients import (
     connector_client,
     scheduler_client,
 )
-from shared.jarvis_common.config import Settings, settings
+from shared.jarvis_common.config import Settings
 from shared.jarvis_common.models import (
     Actor,
     CalendarEventCreateRequest,
@@ -39,10 +39,13 @@ from shared.jarvis_common.models import (
     Context,
     Intent,
     PolicyEvaluationRequest,
-    SchedulerJobRequest,
     TaskCreateRequest,
 )
-from shared.jarvis_common.orchestrator import CommandOrchestrator, intent_action_type, policy_request_for
+from shared.jarvis_common.orchestrator import (
+    CommandOrchestrator,
+    intent_action_type,
+    policy_request_for,
+)
 from shared.jarvis_common.policy_engine import evaluate_policy
 from shared.jarvis_common.stores import ApprovalStore, AuditStore
 
@@ -71,7 +74,9 @@ def _envelope(
 
 
 def test_core_health() -> None:
-    assert client_core.get("/health").json() == {"status": "ok"}
+    payload = client_core.get("/health").json()
+    assert payload["status"] == "ok"
+    assert payload["database"] is False
 
 
 def test_core_command_what_today_executes() -> None:
@@ -254,7 +259,7 @@ def test_web_dashboard_endpoints() -> None:
 
 
 def test_connectors_and_scheduler() -> None:
-    assert client_connectors.get("/health").json() == {"status": "ok"}
+    assert client_connectors.get("/health").json()["status"] == "ok"
     assert client_scheduler.get("/health").json() == {"status": "ok"}
 
     read = client_connectors.post(
@@ -388,7 +393,11 @@ def test_alexa_helpers() -> None:
     with pytest.raises(ValueError, match="Unsupported Alexa intent"):
         parse_alexa_envelope(
             {
-                "request": {"type": "IntentRequest", "requestId": "x", "intent": {"name": "UnknownIntent"}},
+                "request": {
+                    "type": "IntentRequest",
+                    "requestId": "x",
+                    "intent": {"name": "UnknownIntent"},
+                },
                 "session": {},
                 "context": {},
             }
@@ -716,7 +725,6 @@ def test_config_defaults() -> None:
 
 def test_remaining_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
     from services.alexa_ingress import app as alexa_module
-    from shared.jarvis_common.models import CommandResponse
 
     assert client_alexa.get("/health").json() == {"status": "ok"}
     assert client_web.get("/health").json() == {"status": "ok"}
@@ -740,24 +748,30 @@ def test_remaining_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
         audit_store=AuditStore(),
     )
     system = Actor(user_id="sys", role="system", device_id="d")
-    assert bare.handle(
-        CommandEnvelope(
-            request_id="r1",
-            source="scheduler",
-            actor=system,
-            intent=Intent(name="what_today", parameters={}),
-            context=Context(),
-        )
-    ).result["events"] == []
-    assert bare.handle(
-        CommandEnvelope(
-            request_id="r2",
-            source="scheduler",
-            actor=system,
-            intent=Intent(name="set_timer", parameters={"seconds": 1}),
-            context=Context(),
-        )
-    ).result["scheduled"] is True
+    assert (
+        bare.handle(
+            CommandEnvelope(
+                request_id="r1",
+                source="scheduler",
+                actor=system,
+                intent=Intent(name="what_today", parameters={}),
+                context=Context(),
+            )
+        ).result["events"]
+        == []
+    )
+    assert (
+        bare.handle(
+            CommandEnvelope(
+                request_id="r2",
+                source="scheduler",
+                actor=system,
+                intent=Intent(name="set_timer", parameters={"seconds": 1}),
+                context=Context(),
+            )
+        ).result["scheduled"]
+        is True
+    )
 
     class Broken(LocalConnectorClient):
         def calendar_write(self, envelope: CommandEnvelope) -> dict[str, object]:
@@ -794,15 +808,18 @@ def test_remaining_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
             status="denied",
             message="denied",
         )
-        assert client_web.post(
-            "/v1/calendar/events",
-            json={
-                "calendar_scope": "family_shared",
-                "title": "X",
-                "start_time": "2026-07-11T19:00:00-05:00",
-                "end_time": "2026-07-11T20:00:00-05:00",
-            },
-        ).status_code == 400
+        assert (
+            client_web.post(
+                "/v1/calendar/events",
+                json={
+                    "calendar_scope": "family_shared",
+                    "title": "X",
+                    "start_time": "2026-07-11T19:00:00-05:00",
+                    "end_time": "2026-07-11T20:00:00-05:00",
+                },
+            ).status_code
+            == 400
+        )
         assert client_web.post("/v1/tasks", json={"list": "shopping", "title": "X"}).status_code == 400
 
     with patch("services.web.app.orchestrator.handle") as mock_handle:
@@ -812,15 +829,18 @@ def test_remaining_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
             message="ok",
             result={"event_id": "e1"},
         )
-        assert client_web.post(
-            "/v1/calendar/events",
-            json={
-                "calendar_scope": "family_shared",
-                "title": "X",
-                "start_time": "2026-07-11T19:00:00-05:00",
-                "end_time": "2026-07-11T20:00:00-05:00",
-            },
-        ).json()["event_id"] == "e1"
+        assert (
+            client_web.post(
+                "/v1/calendar/events",
+                json={
+                    "calendar_scope": "family_shared",
+                    "title": "X",
+                    "start_time": "2026-07-11T19:00:00-05:00",
+                    "end_time": "2026-07-11T20:00:00-05:00",
+                },
+            ).json()["event_id"]
+            == "e1"
+        )
 
     with pytest.raises(ValueError, match="Unsupported intent"):
         bare._execute(
@@ -833,39 +853,48 @@ def test_remaining_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
             )
         )
 
-    assert LocalSchedulerClient().schedule_job(
-        CommandEnvelope(
-            request_id="r5",
-            source="dashboard",
-            actor=Actor(user_id="u", role="adult", device_id="d"),
-            intent=Intent(name="set_timer", parameters={"seconds": 2}),
-            context=Context(),
-        )
-    )["seconds"] == 2
+    assert (
+        LocalSchedulerClient().schedule_job(
+            CommandEnvelope(
+                request_id="r5",
+                source="dashboard",
+                actor=Actor(user_id="u", role="adult", device_id="d"),
+                intent=Intent(name="set_timer", parameters={"seconds": 2}),
+                context=Context(),
+            )
+        )["seconds"]
+        == 2
+    )
     timed = CommandOrchestrator(
         policy_evaluate=evaluate_policy,
         approval_store=ApprovalStore(),
         audit_store=AuditStore(),
         scheduler_client=LocalSchedulerClient(),
     )
-    assert timed.handle(
-        CommandEnvelope(
-            request_id="r6",
-            source="scheduler",
-            actor=system,
-            intent=Intent(name="set_timer", parameters={"seconds": 3}),
-            context=Context(),
-        )
-    ).result["job_id"] == "local-job"
-    assert timed._execute(
-        CommandEnvelope(
-            request_id="r7",
-            source="scheduler",
-            actor=system,
-            intent=Intent(name="set_timer", parameters={"seconds": 4}),
-            context=Context(),
-        )
-    )["seconds"] == 4
+    assert (
+        timed.handle(
+            CommandEnvelope(
+                request_id="r6",
+                source="scheduler",
+                actor=system,
+                intent=Intent(name="set_timer", parameters={"seconds": 3}),
+                context=Context(),
+            )
+        ).result["job_id"]
+        == "local-job"
+    )
+    assert (
+        timed._execute(
+            CommandEnvelope(
+                request_id="r7",
+                source="scheduler",
+                actor=system,
+                intent=Intent(name="set_timer", parameters={"seconds": 4}),
+                context=Context(),
+            )
+        )["seconds"]
+        == 4
+    )
     with patch.dict(os.environ, {"JARVIS_USE_LOCAL_CLIENTS": "0"}, clear=False):
         assert isinstance(scheduler_client(), HttpSchedulerClient)
 

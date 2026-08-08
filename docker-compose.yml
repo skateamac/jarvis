@@ -7,6 +7,7 @@ services:
     environment:
       JARVIS_CONNECTORS_URL: http://connectors-google:8000
       JARVIS_SCHEDULER_URL: http://scheduler:8000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-jarvis}:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/${POSTGRES_DB:-jarvis}
     ports: ["8001:8000"]
     networks: [internal]
     depends_on: [postgres, redis, policy, connectors-google, scheduler]
@@ -44,6 +45,8 @@ services:
       context: .
       dockerfile: services/connectors_google/Dockerfile
     env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-jarvis}:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/${POSTGRES_DB:-jarvis}
     ports: ["8005:8000"]
     networks: [internal]
 
@@ -61,16 +64,16 @@ services:
     depends_on: [core, connectors-google]
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18.4-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-jarvis}
       POSTGRES_USER: ${POSTGRES_USER:-jarvis}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jarvis}
-    volumes: [postgres_data:/var/lib/postgresql/data]
+    volumes: [postgres_data:/var/lib/postgresql]
     networks: [internal]
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.10-alpine
     volumes: [redis_data:/data]
     networks: [internal]
 

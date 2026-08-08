@@ -95,4 +95,3 @@ class SchedulerJobResponse(BaseModel):
     job_id: str
     status: Literal["scheduled", "failed"]
     message: str
-

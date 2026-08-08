@@ -33,14 +33,11 @@ async def webhook(request: Request) -> dict:
         command_response = core_client.send_command(envelope)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return alexa_error_response()
 
     if command_response.status == "requires_confirmation":
-        message = (
-            f"{command_response.message} "
-            "Please confirm in the Jarvis app or provide your PIN."
-        )
+        message = f"{command_response.message} " "Please confirm in the Jarvis app or provide your PIN."
         return alexa_response_for(message)
 
     if command_response.status == "denied":

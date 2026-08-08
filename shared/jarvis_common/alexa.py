@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
+from shared.jarvis_common.alexa_verify import verify_alexa_signature_headers
 from shared.jarvis_common.config import settings
 from shared.jarvis_common.models import Actor, CommandEnvelope, Context, Intent
 
@@ -35,6 +36,8 @@ def verify_alexa_request(headers: Dict[str, str], body: bytes) -> None:
         age = datetime.now(UTC) - request_time.astimezone(UTC)
         if age.total_seconds() > 150:
             raise ValueError("Alexa request timestamp is stale.")
+
+    verify_alexa_signature_headers(headers, body)
 
 
 def _slot_value(slots: Dict[str, Any], name: str) -> Optional[str]:

@@ -29,7 +29,7 @@ class AuditEvent:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
-class ApprovalStore:
+class MemoryApprovalStore:
     def __init__(self) -> None:
         self._records: Dict[str, ApprovalRecord] = {}
 
@@ -66,7 +66,7 @@ class ApprovalStore:
         return record
 
 
-class AuditStore:
+class MemoryAuditStore:
     def __init__(self) -> None:
         self._events: List[AuditEvent] = []
 
@@ -99,5 +99,21 @@ class AuditStore:
         return list(reversed(self._events[-limit:]))
 
 
-approval_store = ApprovalStore()
-audit_store = AuditStore()
+ApprovalStore = MemoryApprovalStore
+AuditStore = MemoryAuditStore
+
+
+def create_stores() -> tuple[MemoryApprovalStore | object, MemoryAuditStore | object]:
+    from shared.jarvis_common.config import settings
+
+    if settings.database_url:
+        from shared.jarvis_common.db.postgres_stores import (
+            PostgresApprovalStore,
+            PostgresAuditStore,
+        )
+
+        return PostgresApprovalStore(), PostgresAuditStore()
+    return MemoryApprovalStore(), MemoryAuditStore()
+
+
+approval_store, audit_store = create_stores()
