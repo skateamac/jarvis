@@ -1,12 +1,26 @@
 # jarvis
 local AI on a Mac Mini M4
 
-# health checks
-Examples:
+## Health checks (host-published)
 
-Core: http://localhost:8000/health
-Alexa ingress: http://localhost:8001/health
-Policy: http://localhost:8002/health
-Scheduler: http://localhost:8003/health
-Google connectors: http://localhost:8004/health
-Web: http://localhost:8005/health
+- Alexa ingress (public): http://localhost:8002/health
+- Web dashboard (VPN/host): http://localhost:8006/health and http://localhost:8006/
+
+Internal services (`core`, `policy`, `scheduler`, `connectors-google`, `postgres`, `redis`) are not published to the host; they stay on the Docker `internal` network.
+
+## Operations
+
+- Observability: [docs/ops-observability.md](docs/ops-observability.md)
+- Backup/restore: [docs/ops-backup-restore.md](docs/ops-backup-restore.md)
+- Security validation: [docs/ops-security-validation.md](docs/ops-security-validation.md)
+
+```bash
+# Backup
+.venv/bin/python scripts/jarvis_backup.py
+
+# Restore
+.venv/bin/python scripts/jarvis_restore.py backups/jarvis-backup-YYYYMMDDTHHMMSSZ.tar.gz
+
+# Security checklist
+.venv/bin/python scripts/jarvis_security_check.py
+```

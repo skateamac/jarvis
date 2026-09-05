@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 
+from shared.jarvis_common.middleware import install_observability
 from shared.jarvis_common.models import PolicyDecision, PolicyEvaluationRequest
 from shared.jarvis_common.policy_engine import evaluate_policy
 
 app = FastAPI(title="jarvis-policy")
+install_observability(app, "jarvis-policy")
 
 
 @app.get("/health")

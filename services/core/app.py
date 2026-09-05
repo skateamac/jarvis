@@ -4,8 +4,10 @@ from fastapi import FastAPI
 
 from shared.jarvis_common.bootstrap import orchestrator
 from shared.jarvis_common.config import settings
+from shared.jarvis_common.correlation import bind_correlation
 from shared.jarvis_common.db.connection import db_connection
 from shared.jarvis_common.db.migrate import apply_migrations
+from shared.jarvis_common.middleware import install_observability
 from shared.jarvis_common.models import CommandEnvelope, CommandResponse
 
 
@@ -18,6 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="jarvis-core", lifespan=lifespan)
+install_observability(app, "jarvis-core")
 
 
 @app.get("/health")
@@ -27,6 +30,7 @@ def health() -> dict:
 
 @app.post("/v1/commands", response_model=CommandResponse)
 def receive_command(envelope: CommandEnvelope) -> CommandResponse:
+    bind_correlation(envelope.request_id)
     return orchestrator.handle(envelope)
 
 

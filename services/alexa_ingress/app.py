@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, HTTPException, Request
 
 from shared.jarvis_common.alexa import (
@@ -7,8 +9,14 @@ from shared.jarvis_common.alexa import (
     verify_alexa_request,
 )
 from shared.jarvis_common.clients import HttpCoreClient
+from shared.jarvis_common import config as config_module
+from shared.jarvis_common.correlation import bind_correlation
+from shared.jarvis_common.ingress_guard import install_ingress_guard
+from shared.jarvis_common.middleware import install_observability
 
 app = FastAPI(title="jarvis-alexa-ingress")
+install_observability(app, "jarvis-alexa-ingress")
+install_ingress_guard(app)
 core_client = HttpCoreClient()
 
 
@@ -20,6 +28,8 @@ def health() -> dict:
 @app.post("/alexa/webhook")
 async def webhook(request: Request) -> dict:
     body = await request.body()
+    if len(body) > config_module.settings.alexa_max_body_bytes:
+        raise HTTPException(status_code=413, detail="Request body too large.")
     headers = {key.lower(): value for key, value in request.headers.items()}
 
     try:
@@ -30,6 +40,7 @@ async def webhook(request: Request) -> dict:
     try:
         payload = await request.json()
         envelope = parse_alexa_envelope(payload)
+        bind_correlation(envelope.request_id)
         command_response = core_client.send_command(envelope)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

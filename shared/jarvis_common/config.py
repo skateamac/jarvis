@@ -9,6 +9,16 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 @dataclass
 class Settings:
     core_url: str = "http://core:8000"
@@ -16,6 +26,8 @@ class Settings:
     connectors_url: str = "http://connectors-google:8000"
     scheduler_url: str = "http://scheduler:8000"
     alexa_skip_verify: bool = False
+    alexa_rate_limit_per_minute: int = 60
+    alexa_max_body_bytes: int = 262_144
     household_pin: str = "1234"
     policy_version: str = "v0.1"
     database_url: str = ""
@@ -38,6 +50,8 @@ class Settings:
             connectors_url=os.getenv("JARVIS_CONNECTORS_URL", cls.connectors_url),
             scheduler_url=os.getenv("JARVIS_SCHEDULER_URL", cls.scheduler_url),
             alexa_skip_verify=_env_bool("JARVIS_ALEXA_SKIP_VERIFY", default=False),
+            alexa_rate_limit_per_minute=_env_int("JARVIS_ALEXA_RATE_LIMIT_PER_MINUTE", 60),
+            alexa_max_body_bytes=_env_int("JARVIS_ALEXA_MAX_BODY_BYTES", 262_144),
             household_pin=os.getenv("JARVIS_HOUSEHOLD_PIN", cls.household_pin),
             policy_version=os.getenv("JARVIS_POLICY_VERSION", cls.policy_version),
             database_url=os.getenv("DATABASE_URL", cls.database_url),

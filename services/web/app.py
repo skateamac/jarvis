@@ -2,10 +2,14 @@ import uuid
 from typing import Any, Dict, List
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 
+from services.web.dashboard import DASHBOARD_HTML
 from shared.jarvis_common.bootstrap import orchestrator
 from shared.jarvis_common.clients import connector_client
 from shared.jarvis_common.config import settings
+from shared.jarvis_common.correlation import bind_correlation
+from shared.jarvis_common.middleware import install_observability
 from shared.jarvis_common.models import (
     ApprovalActionResponse,
     ApprovalConfirmRequest,
@@ -18,7 +22,13 @@ from shared.jarvis_common.models import (
 from shared.jarvis_common.stores import approval_store, audit_store
 
 app = FastAPI(title="jarvis-web")
+install_observability(app, "jarvis-web")
 _connector = connector_client()
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard() -> str:
+    return DASHBOARD_HTML
 
 
 @app.get("/health")
@@ -114,13 +124,16 @@ def reject_approval(approval_id: str) -> ApprovalActionResponse:
 
 @app.post("/v1/commands", response_model=CommandResponse)
 def submit_command(envelope: CommandEnvelope) -> CommandResponse:
+    bind_correlation(envelope.request_id)
     return orchestrator.handle(envelope)
 
 
 @app.get("/v1/calendar/day")
 def calendar_day(date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")) -> Dict[str, Any]:
+    request_id = str(uuid.uuid4())
+    bind_correlation(request_id)
     envelope = CommandEnvelope(
-        request_id=str(uuid.uuid4()),
+        request_id=request_id,
         source="dashboard",
         actor={"user_id": "dashboard-user", "role": "adult", "device_id": "dashboard"},
         intent={"name": "what_today", "parameters": {"date": date}},
@@ -131,8 +144,10 @@ def calendar_day(date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")) -> Dict
 
 @app.post("/v1/calendar/events")
 def create_calendar_event(payload: CalendarEventCreateRequest) -> Dict[str, Any]:
+    request_id = str(uuid.uuid4())
+    bind_correlation(request_id)
     envelope = CommandEnvelope(
-        request_id=str(uuid.uuid4()),
+        request_id=request_id,
         source="dashboard",
         actor={"user_id": "dashboard-user", "role": "adult", "device_id": "dashboard"},
         intent={"name": "add_event", "parameters": payload.model_dump()},
@@ -152,8 +167,10 @@ def create_calendar_event(payload: CalendarEventCreateRequest) -> Dict[str, Any]
 
 @app.post("/v1/tasks")
 def create_task(payload: TaskCreateRequest) -> Dict[str, Any]:
+    request_id = str(uuid.uuid4())
+    bind_correlation(request_id)
     envelope = CommandEnvelope(
-        request_id=str(uuid.uuid4()),
+        request_id=request_id,
         source="dashboard",
         actor={"user_id": "dashboard-user", "role": "adult", "device_id": "dashboard"},
         intent={"name": "add_task", "parameters": payload.model_dump()},

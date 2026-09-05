@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
+from shared.jarvis_common import config as config_module
 from shared.jarvis_common.alexa_verify import verify_alexa_signature_headers
-from shared.jarvis_common.config import settings
 from shared.jarvis_common.models import Actor, CommandEnvelope, Context, Intent
 
 ALEXA_INTENT_MAP = {
@@ -13,6 +13,9 @@ ALEXA_INTENT_MAP = {
     "AddTaskIntent": "add_task",
     "SetTimerIntent": "set_timer",
 }
+
+# Kept for tests that rebind module-level settings.
+settings = config_module.settings
 
 
 def verify_alexa_request(headers: Dict[str, str], body: bytes) -> None:
@@ -37,6 +40,8 @@ def verify_alexa_request(headers: Dict[str, str], body: bytes) -> None:
         if age.total_seconds() > 150:
             raise ValueError("Alexa request timestamp is stale.")
 
+    # Keep signature verification settings in sync when tests rebind this module's settings.
+    config_module.settings = settings
     verify_alexa_signature_headers(headers, body)
 
 

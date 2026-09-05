@@ -6,7 +6,15 @@ from typing import Any, Dict
 import httpx2 as httpx
 
 from shared.jarvis_common.config import settings
+from shared.jarvis_common.correlation import CORRELATION_HEADER, get_correlation_id
 from shared.jarvis_common.models import CommandEnvelope, CommandResponse
+
+
+def _correlation_headers() -> Dict[str, str]:
+    correlation_id = get_correlation_id()
+    if not correlation_id:
+        return {}
+    return {CORRELATION_HEADER: correlation_id}
 
 
 class LocalConnectorClient:
@@ -68,6 +76,7 @@ class HttpConnectorClient:
             response = client.post(
                 f"{self._base_url}{path}",
                 json=envelope.model_dump(),
+                headers=_correlation_headers(),
             )
             response.raise_for_status()
             payload = response.json()
@@ -85,6 +94,7 @@ class HttpSchedulerClient:
             response = client.post(
                 f"{self._base_url}/internal/scheduler/jobs",
                 json=envelope.model_dump(),
+                headers=_correlation_headers(),
             )
             response.raise_for_status()
             payload = response.json()
@@ -102,6 +112,7 @@ class HttpCoreClient:
             response = client.post(
                 f"{self._base_url}/v1/commands",
                 json=envelope.model_dump(),
+                headers=_correlation_headers(),
             )
             response.raise_for_status()
             return CommandResponse.model_validate(response.json())

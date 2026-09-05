@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.x509 import load_pem_x509_certificate
 
-from shared.jarvis_common.config import settings
+from shared.jarvis_common import config as config_module
 
 ALLOWED_CERT_HOSTS = {"s3.amazonaws.com", "s3.us-east-1.amazonaws.com"}
 ALLOWED_CERT_PATH_PREFIX = "/echo.api/"
@@ -50,7 +50,7 @@ def verify_signature(cert_pem: bytes, signature_b64: str, body: bytes) -> None:
 
 
 def verify_alexa_signature_headers(headers: Dict[str, str], body: bytes) -> None:
-    if settings.alexa_skip_verify:
+    if config_module.settings.alexa_skip_verify:
         return
     signature = headers.get("signature") or headers.get("Signature")
     cert_url = headers.get("signaturecertchainurl") or headers.get("SignatureCertChainUrl")

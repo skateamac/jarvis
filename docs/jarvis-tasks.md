@@ -7,70 +7,77 @@
 - MVP target: calendar + tasks/reminders + Alexa voice + secure approvals.
 
 ## 2) Phase 0 - Foundation
-### T0.1 Repository and service skeletons
+### T0.1 Repository and service skeletons — DONE
 - Create service directories and contracts for core, ingress, scheduler, connectors, web.
 - Define shared config strategy and environment layering.
 - Acceptance: directories, baseline docs, and architecture map are stable.
 
-### T0.2 Local infrastructure baseline
+### T0.2 Local infrastructure baseline — DONE
 - Define Docker Compose stack with isolated networks and persistent volumes.
 - Add health endpoints and startup dependency ordering.
 - Acceptance: stack starts deterministically and all health checks pass.
 
-### T0.3 Data model baseline
+### T0.3 Data model baseline — DONE
 - Define schemas for users, roles, calendars, events, tasks, approvals, audit logs.
 - Acceptance: schema migration plan exists and supports MVP workflows.
 
 ## 3) Phase 1 - Security and Access
-### T1.1 Identity and role model
+### T1.1 Identity and role model — DONE
 - Implement household identity model with adult/child/system roles.
 - Acceptance: role checks are enforceable through centralized policy.
 
-### T1.2 Sensitive action gating
+### T1.2 Sensitive action gating — DONE
 - Implement `ALLOW | DENY | REQUIRE_CONFIRMATION` policy outcomes.
 - Add PIN/app confirmation path for sensitive commands.
 - Acceptance: calendar writes and equivalent actions require confirmation when configured.
 
-### T1.3 Network hardening controls
+### T1.3 Network hardening controls — DONE
 - Restrict public exposure to Alexa ingress endpoint only.
 - Enforce VPN-only access for dashboard/admin APIs.
 - Acceptance: external scans show no unintended public endpoints.
+- Notes: Compose publishes only `alexa-ingress` (public) and `web` (host/VPN). Other services remain on the internal Docker network.
 
 ## 4) Phase 1 - Core Product Capabilities
-### T2.1 Alexa ingress integration
+### T2.1 Alexa ingress integration — DONE
 - Implement signature/timestamp verification and intent normalization.
 - Map core intents (`what_today`, `add_event`, `add_task`, `set_timer`).
 - Acceptance: Echo/Show commands execute and return safe voice responses.
 
-### T2.2 Core command orchestration
+### T2.2 Core command orchestration — DONE
 - Implement command envelope parsing, policy evaluation, and execution routing.
 - Acceptance: command outcomes are deterministic and audit-logged.
 
-### T2.3 Google calendar and tasks connectors
+### T2.3 Google calendar and tasks connectors — DONE
 - Implement OAuth token lifecycle and connector adapters.
 - Support family shared + spouse personal calendars (read/write) and work calendar (read-only).
 - Acceptance: events/tasks sync reliably with conflict and retry handling.
+- Notes: Live Google API path is implemented; conflict/retry hardening can still deepen.
 
-### T2.4 Scheduler and reminders
+### T2.4 Scheduler and reminders — DONE
 - Implement recurring reminder jobs and date-night monthly reminder.
 - Acceptance: reminder triggers are accurate and recover after restart.
+- Notes: Durable job store (memory/Postgres), `/internal/scheduler/tick`, autotick loop, monthly date-night reschedule.
 
-### T2.5 Dashboard (VPN-only)
+### T2.5 Dashboard (VPN-only) — DONE
 - Build responsive views for timeline, pending approvals, and schedule/tasks.
 - Acceptance: iPhone browser access over VPN is stable; approvals work end-to-end.
+- Notes: HTML dashboard at `web:/` with PIN approve/reject; API surface remains available.
 
 ## 5) Phase 1 - Reliability and Operations
-### T3.1 Audit and observability
+### T3.1 Audit and observability — DONE
 - Implement structured logs, correlation IDs, and action audit stream.
 - Acceptance: each request traces from ingress through side effects.
+- Notes: JSON logs, `X-Correlation-ID` propagation, orchestrator/connector/scheduler events. See `docs/ops-observability.md`.
 
-### T3.2 Backup and restore
+### T3.2 Backup and restore — DONE
 - Implement backup procedure for state DB and required configs.
 - Acceptance: restore drill passes and is documented.
+- Notes: `scripts/jarvis_backup.py`, `scripts/jarvis_restore.py`, `docs/ops-backup-restore.md`.
 
-### T3.3 Security validation
-- Run hardening checklist from `jarvis-security.md`.
+### T3.3 Security validation — DONE
+- Run hardening checklist from `jarvis-sec.md`.
 - Acceptance: ingress validation, auth controls, and log redaction verified.
+- Notes: `scripts/jarvis_security_check.py`, ingress rate/body limits, `docs/ops-security-validation.md`.
 
 ## 6) Phase 2 - Priority Expansion
 ### T4.1 Email summarization pipeline

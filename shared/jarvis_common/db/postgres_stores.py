@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Literal, Optional
@@ -8,8 +9,11 @@ from typing import Any, Dict, List, Literal, Optional
 import psycopg.rows
 
 from shared.jarvis_common.db.connection import db_connection
+from shared.jarvis_common.logging import get_logger, log_event
 from shared.jarvis_common.models import CommandEnvelope
 from shared.jarvis_common.stores import ApprovalRecord, AuditEvent
+
+logger = get_logger("jarvis.audit")
 
 
 class PostgresApprovalStore:
@@ -130,6 +134,18 @@ class PostgresAuditStore:
                 ),
             )
             conn.commit()
+        log_event(
+            logger,
+            logging.INFO,
+            "audit.appended",
+            extra={
+                "request_id": request_id,
+                "source": source,
+                "actor_id": actor_id,
+                "action": action,
+                "outcome": outcome,
+            },
+        )
         return event
 
     def list_events(self, limit: int = 50) -> List[AuditEvent]:

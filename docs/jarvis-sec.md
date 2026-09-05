@@ -152,15 +152,15 @@ flowchart LR
    - Timeline, impact, permanent controls.
 
 ## 11) Hardening Checklist
-- [ ] Alexa signature/timestamp verification enforced
-- [ ] Public endpoint limited to Alexa route only
-- [ ] VPN enforced for dashboard/admin
-- [ ] Sensitive commands require confirmation
-- [ ] Secret rotation process documented and tested
-- [ ] Backup and restore tested
-- [ ] Log redaction verified
-- [ ] Rate limiting and DoS protections enabled
-- [ ] Dependency update policy defined
+- [x] Alexa signature/timestamp verification enforced
+- [x] Public endpoint limited to Alexa route only
+- [x] VPN enforced for dashboard/admin (automated: internal network; manual: VPN drill in ops runbook)
+- [x] Sensitive commands require confirmation
+- [x] Secret rotation process documented and tested
+- [x] Backup and restore tested
+- [x] Log redaction verified
+- [x] Rate limiting and DoS protections enabled
+- [x] Dependency update policy defined
 
 ## 12) Residual Risks
 - Alexa cloud mediation remains external dependency.

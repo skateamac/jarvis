@@ -8,7 +8,7 @@ services:
       JARVIS_CONNECTORS_URL: http://connectors-google:8000
       JARVIS_SCHEDULER_URL: http://scheduler:8000
       DATABASE_URL: postgresql://${POSTGRES_USER:-jarvis}:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/${POSTGRES_DB:-jarvis}
-    ports: ["8001:8000"]
+    # Internal-only: no host ports (reachable via Docker network / VPN host services).
     networks: [internal]
     depends_on: [postgres, redis, policy, connectors-google, scheduler]
 
@@ -20,6 +20,9 @@ services:
     environment:
       JARVIS_CORE_URL: http://core:8000
       JARVIS_ALEXA_SKIP_VERIFY: ${JARVIS_ALEXA_SKIP_VERIFY:-0}
+      JARVIS_ALEXA_RATE_LIMIT_PER_MINUTE: ${JARVIS_ALEXA_RATE_LIMIT_PER_MINUTE:-60}
+      JARVIS_ALEXA_MAX_BODY_BYTES: ${JARVIS_ALEXA_MAX_BODY_BYTES:-262144}
+    # Sole public ingress exception.
     ports: ["8002:8000"]
     networks: [internal, public]
     depends_on: [core]
@@ -29,7 +32,6 @@ services:
       context: .
       dockerfile: services/policy/Dockerfile
     env_file: [.env]
-    ports: ["8003:8000"]
     networks: [internal]
 
   scheduler:
@@ -37,8 +39,12 @@ services:
       context: .
       dockerfile: services/scheduler/Dockerfile
     env_file: [.env]
-    ports: ["8004:8000"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-jarvis}:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/${POSTGRES_DB:-jarvis}
+      JARVIS_SCHEDULER_AUTOTICK: ${JARVIS_SCHEDULER_AUTOTICK:-1}
+      JARVIS_SCHEDULER_TICK_SECONDS: ${JARVIS_SCHEDULER_TICK_SECONDS:-5}
     networks: [internal]
+    depends_on: [postgres]
 
   connectors-google:
     build:
@@ -47,8 +53,8 @@ services:
     env_file: [.env]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-jarvis}:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/${POSTGRES_DB:-jarvis}
-    ports: ["8005:8000"]
     networks: [internal]
+    depends_on: [postgres]
 
   web:
     build:
@@ -59,6 +65,7 @@ services:
       JARVIS_CORE_URL: http://core:8000
       JARVIS_CONNECTORS_URL: http://connectors-google:8000
       JARVIS_SCHEDULER_URL: http://scheduler:8000
+    # VPN-only surface: published on host for Tailscale/WireGuard access.
     ports: ["8006:8000"]
     networks: [internal]
     depends_on: [core, connectors-google]

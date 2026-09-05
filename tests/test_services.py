@@ -31,6 +31,7 @@ from shared.jarvis_common.clients import (
     scheduler_client,
 )
 from shared.jarvis_common.config import Settings
+from shared.jarvis_common.correlation import bind_correlation
 from shared.jarvis_common.models import (
     Actor,
     CalendarEventCreateRequest,
@@ -237,6 +238,10 @@ def test_web_confirm_and_reject_approval() -> None:
 
 
 def test_web_dashboard_endpoints() -> None:
+    home = client_web.get("/")
+    assert home.status_code == 200
+    assert "Pending approvals" in home.text
+
     task = client_web.post("/v1/tasks", json={"list": "shopping", "title": "Milk"})
     assert task.status_code == 200
     assert task.json()["status"] == "created"
@@ -258,9 +263,10 @@ def test_web_dashboard_endpoints() -> None:
     assert event.json()["status"] == "requires_confirmation"
 
 
+
 def test_connectors_and_scheduler() -> None:
     assert client_connectors.get("/health").json()["status"] == "ok"
-    assert client_scheduler.get("/health").json() == {"status": "ok"}
+    assert client_scheduler.get("/health").json()["status"] == "ok"
 
     read = client_connectors.post(
         "/internal/connectors/google/calendar/read",
@@ -288,12 +294,20 @@ def test_connectors_and_scheduler() -> None:
 
     timer = client_scheduler.post("/internal/scheduler/jobs", json=_envelope("set_timer", parameters={"seconds": 30}))
     assert timer.json()["status"] == "scheduled"
+    assert timer.json()["job_type"] == "timer"
 
     job = client_scheduler.post(
         "/internal/scheduler/jobs/create",
-        json={"job_type": "date_night_check", "payload": {}, "run_at": None},
+        json={"job_type": "date_night_check", "payload": {"title": "Date night"}, "run_at": None},
     )
     assert job.json()["status"] == "scheduled"
+
+    listed = client_scheduler.get("/internal/scheduler/jobs")
+    assert len(listed.json()["jobs"]) >= 1
+
+    missing = client_scheduler.get("/internal/scheduler/jobs/does-not-exist")
+    assert missing.json()["status"] == "not_found"
+
 
 
 def test_models_and_policy_helpers() -> None:
@@ -426,10 +440,51 @@ def test_alexa_helpers() -> None:
             },
             b"{}",
         )
-    verify_alexa_request(
-        {"Signature": "sig", "SignatureCertChainUrl": "url", "Timestamp": fresh_time},
-        b"{}",
+    with patch("shared.jarvis_common.alexa.verify_alexa_signature_headers") as mock_verify:
+        verify_alexa_request(
+            {"Signature": "sig", "SignatureCertChainUrl": "url", "Timestamp": fresh_time},
+            b"{}",
+        )
+        mock_verify.assert_called_once()
+
+
+def test_http_clients_propagate_correlation_header() -> None:
+    from shared.jarvis_common.clients import HttpConnectorClient
+
+    envelope = CommandEnvelope(
+        request_id="req-http",
+        source="dashboard",
+        actor=Actor(user_id="u1", role="adult", device_id="d1"),
+        intent=Intent(name="what_today", parameters={}),
+        context=Context(),
     )
+
+    captured: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["correlation"] = request.headers.get("x-correlation-id", "")
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+
+    class ClientFactory:
+        def __init__(self, shared_client: httpx.Client) -> None:
+            self._shared_client = shared_client
+
+        def __call__(self, *args: object, **kwargs: object) -> "ClientFactory":
+            return self
+
+        def __enter__(self) -> httpx.Client:
+            return self._shared_client
+
+        def __exit__(self, *args: object) -> bool:
+            return False
+
+    with httpx.Client(transport=transport, base_url="http://test") as client:
+        with patch("shared.jarvis_common.clients.httpx.Client", ClientFactory(client)):
+            bind_correlation("corr-http")
+            HttpConnectorClient(base_url="http://test").calendar_read(envelope)
+    assert captured["correlation"] == "corr-http"
 
 
 def test_http_clients_with_mock_transport() -> None:
@@ -908,6 +963,128 @@ def test_alexa_unauthorized(monkeypatch: pytest.MonkeyPatch) -> None:
     alexa_module.settings = config_module.settings
     response = client_alexa.post("/alexa/webhook", json=_alexa_payload("WhatTodayIntent"))
     assert response.status_code == 401
+
+
+def test_scheduler_tick_and_date_night() -> None:
+    from shared.jarvis_common.job_store import job_store
+    from shared.jarvis_common.scheduler_engine import (
+        create_job,
+        ensure_date_night_job,
+        next_date_night_run,
+        process_due_jobs,
+    )
+
+    past = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
+    created = client_scheduler.post(
+        "/internal/scheduler/jobs/create",
+        json={"job_type": "reminder", "payload": {"title": "Take out trash"}, "run_at": past},
+    )
+    assert created.json()["status"] == "scheduled"
+
+    # create_job without explicit run_at (non date-night) uses now
+    assert create_job(job_type="reminder", payload={"title": "Soon"})["status"] == "scheduled"
+
+    tick = client_scheduler.post("/internal/scheduler/tick")
+    payload = tick.json()
+    assert payload["processed"] >= 1
+    assert any(item["job_type"] == "reminder" for item in payload["results"])
+
+    timer = client_scheduler.post(
+        "/internal/scheduler/jobs/create",
+        json={
+            "job_type": "timer",
+            "payload": {"message": "Eggs done", "seconds": 1},
+            "run_at": past,
+        },
+    )
+    timer_id = timer.json()["job_id"]
+    timer_tick = client_scheduler.post("/internal/scheduler/tick").json()
+    assert any(item["job_id"] == timer_id and item["message"] == "Eggs done" for item in timer_tick["results"])
+
+    date_night = client_scheduler.post(
+        "/internal/scheduler/jobs/create",
+        json={
+            "job_type": "date_night_check",
+            "payload": {"title": "Plan date night"},
+            "run_at": past,
+        },
+    )
+    job_id = date_night.json()["job_id"]
+    due = client_scheduler.post("/internal/scheduler/tick").json()
+    assert any(item["job_id"] == job_id and "next_job_id" in item for item in due["results"])
+    got = client_scheduler.get(f"/internal/scheduler/jobs/{job_id}")
+    assert got.json()["status"] == "completed"
+    assert client_scheduler.get("/internal/scheduler/jobs/missing-id").json()["status"] == "not_found"
+
+    job_store.clear()
+    seeded = ensure_date_night_job()
+    assert seeded is not None
+    assert ensure_date_night_job() is None
+    assert job_store.mark_status("missing-job", "failed") is None
+
+    december = datetime(2026, 12, 15, 12, 0, tzinfo=UTC)
+    nxt = next_date_night_run(december, timezone="America/Chicago")
+    assert nxt.astimezone(UTC).month == 1
+    assert nxt.astimezone(UTC).year == 2027
+
+    empty_tick = process_due_jobs(now=datetime.now(UTC) - timedelta(days=365))
+    assert empty_tick == []
+
+
+def test_scheduler_lifespan_with_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    from shared.jarvis_common import config as config_module
+    from services.scheduler.app import app as fresh_scheduler_app
+
+    monkeypatch.setenv("JARVIS_SCHEDULER_AUTOTICK", "0")
+    config_module.settings = Settings(database_url="postgresql://example")
+
+    with patch("services.scheduler.app.settings", config_module.settings):
+        with patch("services.scheduler.app.db_connection") as db_conn:
+            with patch("services.scheduler.app.apply_migrations") as migrate:
+                with patch("services.scheduler.app.ensure_date_night_job", return_value=None):
+                    db_conn.return_value.__enter__.return_value = object()
+                    db_conn.return_value.__exit__.return_value = None
+                    with TestClient(fresh_scheduler_app) as client:
+                        assert client.get("/health").json()["status"] == "ok"
+                    migrate.assert_called_once()
+
+
+def test_scheduler_autotick_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services.scheduler import app as scheduler_module
+
+    monkeypatch.setenv("JARVIS_SCHEDULER_AUTOTICK", "true")
+    assert scheduler_module._autotick_enabled() is True
+    monkeypatch.setenv("JARVIS_SCHEDULER_AUTOTICK", "0")
+    assert scheduler_module._autotick_enabled() is False
+
+    monkeypatch.setenv("JARVIS_SCHEDULER_TICK_SECONDS", "2.5")
+    assert scheduler_module._tick_seconds() == 2.5
+    monkeypatch.setenv("JARVIS_SCHEDULER_TICK_SECONDS", "nope")
+    assert scheduler_module._tick_seconds() == 5.0
+    monkeypatch.setenv("JARVIS_SCHEDULER_TICK_SECONDS", "0.1")
+    assert scheduler_module._tick_seconds() == 0.5
+
+
+def test_scheduler_lifespan_autotick(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    from services.scheduler.app import app as fresh_scheduler_app
+
+    monkeypatch.setenv("JARVIS_SCHEDULER_AUTOTICK", "1")
+    monkeypatch.setenv("JARVIS_SCHEDULER_TICK_SECONDS", "0.05")
+
+    calls = {"n": 0}
+
+    def fake_process() -> list[dict[str, object]]:
+        calls["n"] += 1
+        return []
+
+    with patch("services.scheduler.app.process_due_jobs", side_effect=fake_process):
+        with patch("services.scheduler.app.ensure_date_night_job", return_value=None):
+            with TestClient(fresh_scheduler_app) as client:
+                assert client.get("/health").json()["status"] == "ok"
+                time.sleep(0.15)
+    assert calls["n"] >= 1
 
 
 def _alexa_payload(intent_name: str) -> dict[str, object]:

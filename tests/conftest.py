@@ -6,6 +6,8 @@ import pytest
 
 from shared.jarvis_common.config import Settings
 from shared.jarvis_common.db.oauth_store import oauth_token_store
+from shared.jarvis_common.ingress_guard import reset_rate_limiter
+from shared.jarvis_common.job_store import job_store
 from shared.jarvis_common.stores import approval_store, audit_store
 
 sys.modules.setdefault("httpx", httpx2)
@@ -13,6 +15,7 @@ sys.modules.setdefault("httpx", httpx2)
 os.environ.setdefault("JARVIS_USE_LOCAL_CLIENTS", "1")
 os.environ.setdefault("JARVIS_ALEXA_SKIP_VERIFY", "1")
 os.environ.setdefault("JARVIS_HOUSEHOLD_PIN", "1234")
+os.environ.setdefault("JARVIS_SCHEDULER_AUTOTICK", "0")
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +23,8 @@ def reset_stores() -> None:
     approval_store.clear()
     audit_store.clear()
     oauth_token_store.clear()
+    job_store.clear()
+    reset_rate_limiter()
 
 
 @pytest.fixture(autouse=True)
