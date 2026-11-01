@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Literal, Optional
 
+from shared.jarvis_common.logging import get_logger, log_event
 from shared.jarvis_common.models import CommandEnvelope
+
+logger = get_logger("jarvis.audit")
 
 
 @dataclass
@@ -93,6 +97,18 @@ class MemoryAuditStore:
             detail=detail or {},
         )
         self._events.append(event)
+        log_event(
+            logger,
+            logging.INFO,
+            "audit.appended",
+            extra={
+                "request_id": request_id,
+                "source": source,
+                "actor_id": actor_id,
+                "action": action,
+                "outcome": outcome,
+            },
+        )
         return event
 
     def list_events(self, limit: int = 50) -> List[AuditEvent]:

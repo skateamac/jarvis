@@ -281,5 +281,7 @@ def test_google_api_edge_cases() -> None:
                         raise_for_status=lambda: None,
                         json=lambda: ["bad"],
                     )
-                    with pytest.raises(ValueError, match="Invalid Google API response"):
-                        calendar_read(_envelope(date="2026-07-11"))
+                    # Bad calendar responses are skipped so one bad ID cannot break the whole day read.
+                    skipped = calendar_read(_envelope(date="2026-07-11"))
+                    assert skipped["events"] == []
+                    assert skipped.get("errors")

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Dict, Optional, Protocol
 
+from shared.jarvis_common.correlation import bind_correlation
+from shared.jarvis_common.logging import get_logger, log_event
 from shared.jarvis_common.models import (
     CommandEnvelope,
     CommandResponse,
@@ -9,6 +12,8 @@ from shared.jarvis_common.models import (
     PolicyEvaluationRequest,
 )
 from shared.jarvis_common.stores import ApprovalStore, AuditStore
+
+logger = get_logger("jarvis.orchestrator")
 
 
 class ConnectorClient(Protocol):
@@ -66,7 +71,29 @@ class CommandOrchestrator:
         self._scheduler_client = scheduler_client
 
     def handle(self, envelope: CommandEnvelope) -> CommandResponse:
+        bind_correlation(envelope.request_id)
+        log_event(
+            logger,
+            logging.INFO,
+            "command.received",
+            extra={
+                "request_id": envelope.request_id,
+                "source": envelope.source,
+                "intent": envelope.intent.name,
+                "actor_id": envelope.actor.user_id,
+            },
+        )
         decision = self._policy_evaluate(policy_request_for(envelope))
+        log_event(
+            logger,
+            logging.INFO,
+            "policy.decision",
+            extra={
+                "request_id": envelope.request_id,
+                "decision": decision.decision,
+                "reason": decision.reason,
+            },
+        )
         action = envelope.intent.name
 
         if decision.decision == "DENY":
@@ -113,6 +140,12 @@ class CommandOrchestrator:
             )
 
         self._audit(envelope, action=action, outcome="executed", detail=result)
+        log_event(
+            logger,
+            logging.INFO,
+            "command.executed",
+            extra={"request_id": envelope.request_id, "intent": action, "outcome": "executed"},
+        )
         return CommandResponse(
             request_id=envelope.request_id,
             status="executed",
@@ -128,6 +161,13 @@ class CommandOrchestrator:
                 status="failed",
                 message="Approval not found.",
             )
+        bind_correlation(record.request_id)
+        log_event(
+            logger,
+            logging.INFO,
+            "approval.execute",
+            extra={"request_id": record.request_id, "approval_id": approval_id},
+        )
         if record.status != "approved":
             return CommandResponse(
                 request_id=record.request_id,

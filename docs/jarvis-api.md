@@ -19,12 +19,18 @@
 - `GET /v1/calendar/day`
 - `POST /v1/calendar/events`
 - `POST /v1/tasks`
+- `GET /v1/email/summaries`
+- `GET /v1/extractions/pending`
+- `GET /v1/extractions/stats`
+- `POST /v1/extractions/{extraction_id}/accept`
+- `POST /v1/extractions/{extraction_id}/reject`
 
 ### 2.3 Internal
 - `POST /internal/policy/evaluate`
 - `POST /internal/connectors/google/calendar/read`
 - `POST /internal/connectors/google/calendar/write`
 - `POST /internal/connectors/google/tasks/create`
+- `POST /internal/connectors/google/email/pipeline`
 - `POST /internal/scheduler/jobs`
 
 ## 3) Canonical Command Envelope
@@ -180,6 +186,16 @@ Response:
   "policy_version": "string"
 }
 ```
+
+## 9.5) Email and School Extractions Events (VPN-only)
+- `GET /v1/email/summaries` — latest mailbox summaries (`cadence`, `summary_text`, `message_count`).
+- `GET /v1/extractions/pending` — reviewable school-event candidates with confidence scores.
+- `GET /v1/extractions/stats` — `{pending, approved, rejected, acceptance_rate}`.
+- `POST /v1/extractions/{id}/accept` — PIN confirmation, then calendar write via orchestrator.
+- `POST /v1/extractions/{id}/reject` — mark rejected for acceptance-rate tracking.
+- `POST /internal/connectors/google/email/pipeline` — manual ingest/summarize/extract run.
+- Scheduler job type `email_summary` runs on configurable cadence (`JARVIS_EMAIL_SUMMARY_CADENCE`).
+- Google OAuth now requests `gmail.readonly`; reconnect household Google account after upgrade.
 
 ## 10) Error Contract
 All private APIs return standard error envelope:

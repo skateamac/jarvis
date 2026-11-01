@@ -6,7 +6,15 @@ from typing import Any, Dict
 import httpx2 as httpx
 
 from shared.jarvis_common.config import settings
+from shared.jarvis_common.correlation import CORRELATION_HEADER, get_correlation_id
 from shared.jarvis_common.models import CommandEnvelope, CommandResponse
+
+
+def _correlation_headers() -> Dict[str, str]:
+    correlation_id = get_correlation_id()
+    if not correlation_id:
+        return {}
+    return {CORRELATION_HEADER: correlation_id}
 
 
 class LocalConnectorClient:
@@ -27,6 +35,19 @@ class LocalConnectorClient:
             "status": "created",
             "title": envelope.intent.parameters.get("title", "Untitled task"),
         }
+
+    def oauth_start(self, account_key: str = "household") -> dict[str, object]:
+        return {
+            "auth_url": f"https://example.invalid/oauth?account={account_key}",
+            "state": "local-state",
+            "account_key": account_key,
+        }
+
+    def oauth_callback(self, code: str, state: str) -> dict[str, object]:
+        return {"status": "connected", "account_key": "household", "code": code, "state": state}
+
+    def oauth_status(self, account_key: str = "household") -> dict[str, object]:
+        return {"connected": False, "account_key": account_key}
 
 
 class LocalSchedulerClient:
@@ -63,11 +84,37 @@ class HttpConnectorClient:
     def task_create(self, envelope: CommandEnvelope) -> Dict[str, Any]:
         return self._post("/internal/connectors/google/tasks/create", envelope)
 
+    def oauth_start(self, account_key: str = "household") -> Dict[str, Any]:
+        return self._get("/internal/connectors/google/oauth/start", params={"account_key": account_key})
+
+    def oauth_callback(self, code: str, state: str) -> Dict[str, Any]:
+        return self._get(
+            "/internal/connectors/google/oauth/callback",
+            params={"code": code, "state": state},
+        )
+
+    def oauth_status(self, account_key: str = "household") -> Dict[str, Any]:
+        return self._get("/internal/connectors/google/oauth/status", params={"account_key": account_key})
+
+    def _get(self, path: str, *, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        with httpx.Client(timeout=15.0) as client:
+            response = client.get(
+                f"{self._base_url}{path}",
+                params=params,
+                headers=_correlation_headers(),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("Connector response must be a JSON object.")
+            return payload
+
     def _post(self, path: str, envelope: CommandEnvelope) -> Dict[str, Any]:
         with httpx.Client(timeout=10.0) as client:
             response = client.post(
                 f"{self._base_url}{path}",
                 json=envelope.model_dump(),
+                headers=_correlation_headers(),
             )
             response.raise_for_status()
             payload = response.json()
@@ -85,6 +132,7 @@ class HttpSchedulerClient:
             response = client.post(
                 f"{self._base_url}/internal/scheduler/jobs",
                 json=envelope.model_dump(),
+                headers=_correlation_headers(),
             )
             response.raise_for_status()
             payload = response.json()
@@ -102,6 +150,7 @@ class HttpCoreClient:
             response = client.post(
                 f"{self._base_url}/v1/commands",
                 json=envelope.model_dump(),
+                headers=_correlation_headers(),
             )
             response.raise_for_status()
             return CommandResponse.model_validate(response.json())

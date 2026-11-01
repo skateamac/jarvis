@@ -1,0 +1,157 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "jarvis bot",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "WhatTodayIntent",
+          "slots": [
+            {
+              "name": "date",
+              "type": "AMAZON.DATE"
+            }
+          ],
+          "samples": [
+            "what's on today",
+            "what is on today",
+            "what's on my calendar",
+            "what's on my calendar {date}",
+            "what do I have today",
+            "what do I have on {date}",
+            "what's happening today",
+            "what's happening on {date}"
+          ]
+        },
+        {
+          "name": "AddEventIntent",
+          "slots": [
+            {
+              "name": "title",
+              "type": "TITLE"
+            },
+            {
+              "name": "date",
+              "type": "AMAZON.DATE"
+            },
+            {
+              "name": "time",
+              "type": "AMAZON.TIME"
+            },
+            {
+              "name": "calendar_scope",
+              "type": "CALENDAR_SCOPE"
+            }
+          ],
+          "samples": [
+            "add event {title}",
+            "add an event {title}",
+            "schedule {title}",
+            "schedule {title} on {date}",
+            "schedule {title} on {date} at {time}",
+            "add event {title} to {calendar_scope}",
+            "add {title} to the {calendar_scope} calendar"
+          ]
+        },
+        {
+          "name": "AddTaskIntent",
+          "slots": [
+            {
+              "name": "title",
+              "type": "TITLE"
+            },
+            {
+              "name": "list",
+              "type": "TASK_LIST"
+            },
+            {
+              "name": "date",
+              "type": "AMAZON.DATE"
+            }
+          ],
+          "samples": [
+            "add task {title}",
+            "add a task {title}",
+            "remind me to {title}",
+            "add {title} to {list}",
+            "add {title} to the {list} list",
+            "add task {title} due {date}"
+          ]
+        },
+        {
+          "name": "SetTimerIntent",
+          "slots": [
+            {
+              "name": "duration",
+              "type": "AMAZON.DURATION"
+            }
+          ],
+          "samples": [
+            "set a timer for {duration}",
+            "set timer {duration}",
+            "start a timer for {duration}",
+            "timer for {duration}"
+          ]
+        }
+      ],
+      "types": [
+        {
+          "name": "TITLE",
+          "values": [
+            { "name": { "value": "soccer practice" } },
+            { "name": { "value": "doctor appointment" } },
+            { "name": { "value": "dentist appointment" } },
+            { "name": { "value": "parent teacher conference" } },
+            { "name": { "value": "school pickup" } },
+            { "name": { "value": "school drop off" } },
+            { "name": { "value": "field trip" } },
+            { "name": { "value": "date night" } },
+            { "name": { "value": "family dinner" } },
+            { "name": { "value": "birthday party" } },
+            { "name": { "value": "team meeting" } },
+            { "name": { "value": "haircut" } },
+            { "name": { "value": "piano lesson" } },
+            { "name": { "value": "swim practice" } },
+            { "name": { "value": "baseball game" } },
+            { "name": { "value": "buy milk" } },
+            { "name": { "value": "buy groceries" } },
+            { "name": { "value": "pick up dry cleaning" } },
+            { "name": { "value": "take out trash" } },
+            { "name": { "value": "call the vet" } },
+            { "name": { "value": "pay bills" } },
+            { "name": { "value": "pack lunch" } },
+            { "name": { "value": "walk the dog" } },
+            { "name": { "value": "laundry" } },
+            { "name": { "value": "oil change" } }
+          ]
+        },
+        {
+          "name": "CALENDAR_SCOPE",
+          "values": [
+            { "name": { "value": "family_shared", "synonyms": ["family", "shared", "family calendar"] } },
+            { "name": { "value": "spouse_personal", "synonyms": ["spouse", "personal", "her calendar", "his calendar"] } }
+          ]
+        },
+        {
+          "name": "TASK_LIST",
+          "values": [
+            { "name": { "value": "household", "synonyms": ["home", "family"] } },
+            { "name": { "value": "shopping", "synonyms": ["groceries", "grocery"] } },
+            { "name": { "value": "personal", "synonyms": ["mine", "my list"] } }
+          ]
+        }
+      ]
+    }
+  }
+}

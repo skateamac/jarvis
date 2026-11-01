@@ -292,7 +292,7 @@ def test_alexa_verify() -> None:
             raise_for_status=lambda: None,
         )
         assert fetch_cert_pem("https://s3.amazonaws.com/echo.api/cert.pem").startswith(b"-----BEGIN")
-    with patch("shared.jarvis_common.alexa_verify.settings", Settings(alexa_skip_verify=True)):
+    with patch("shared.jarvis_common.config.settings", Settings(alexa_skip_verify=True)):
         verify_alexa_signature_headers({}, b"")
     with patch("shared.jarvis_common.alexa_verify.fetch_cert_pem", return_value=pem):
         verify_alexa_signature_headers(
@@ -400,7 +400,7 @@ def test_remaining_db_coverage() -> None:
     with pytest.raises(ValueError, match="Invalid Alexa certificate URL"):
         validate_cert_url("https://s3.amazonaws.com/other/cert.pem")
     pem, signature, body = _signed_body()
-    with patch("shared.jarvis_common.alexa_verify.settings", Settings(alexa_skip_verify=False)):
+    with patch("shared.jarvis_common.config.settings", Settings(alexa_skip_verify=False)):
         with pytest.raises(ValueError, match="Missing Alexa signature headers"):
             verify_alexa_signature_headers({}, body)
 
@@ -477,7 +477,7 @@ def test_remaining_db_coverage() -> None:
     with patch("shared.jarvis_common.db.migrate.migration_files", return_value=[sql_path]):
         assert apply_migrations(conn) == []
 
-    with patch("shared.jarvis_common.alexa_verify.settings", Settings(alexa_skip_verify=False)):
+    with patch("shared.jarvis_common.config.settings", Settings(alexa_skip_verify=False)):
         with pytest.raises(ValueError, match="Empty Alexa request body"):
             verify_alexa_signature_headers(
                 {
@@ -494,3 +494,55 @@ def test_remaining_db_coverage() -> None:
                 },
                 body,
             )
+
+
+def test_postgres_job_store() -> None:
+    from shared.jarvis_common.job_store import PostgresJobStore, _job_from_row, create_job_store
+
+    now = datetime.now(UTC)
+    store = PostgresJobStore()
+    row = {
+        "job_id": "11111111-1111-1111-1111-111111111111",
+        "job_type": "timer",
+        "payload": {"seconds": 10},
+        "run_at": now,
+        "status": "scheduled",
+        "created_at": now,
+    }
+
+    conn = FakeConn()
+
+    @contextmanager
+    def provide(_dsn: str | None = None) -> Iterator[FakeConn]:
+        yield conn
+
+    with patch("shared.jarvis_common.job_store.db_connection", provide):
+        store.clear()
+        created = store.create(job_type="timer", payload={"seconds": 10}, run_at=now)
+        conn.fetchone_queue = [{**row, "job_id": created.job_id}]
+        assert store.get(created.job_id) is not None
+        conn.fetchone_queue = [None]
+        assert store.get("missing") is None
+        conn.fetchall_queue = [[{**row, "payload": '{"seconds": 10}'}]]
+        assert store.list_jobs(status="scheduled")
+        conn.fetchall_queue = [[row]]
+        assert store.list_jobs()
+        conn.fetchall_queue = [[{**row, "run_at": now - timedelta(minutes=1)}]]
+        assert store.list_due(now=now)
+        conn.fetchone_queue = [{**row, "job_id": created.job_id}]
+        updated = store.mark_status(created.job_id, "completed")
+        assert updated is not None and updated.status == "completed"
+        conn.fetchone_queue = [None]
+        assert store.mark_status("missing", "failed") is None
+        conn.fetchone_queue = [(1,)]
+        assert store.has_scheduled_type("date_night_check") is True
+        conn.fetchone_queue = [None]
+        assert store.has_scheduled_type("date_night_check") is False
+
+    parsed = _job_from_row({**row, "payload": '{"title": "X"}', "job_type": "reminder"})
+    assert parsed.payload["title"] == "X"
+
+    with patch("shared.jarvis_common.config.settings", Settings(database_url="postgresql://x")):
+        assert create_job_store().__class__.__name__ == "PostgresJobStore"
+    with patch("shared.jarvis_common.config.settings", Settings(database_url="")):
+        assert create_job_store().__class__.__name__ == "MemoryJobStore"

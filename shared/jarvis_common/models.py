@@ -86,9 +86,44 @@ class TimelineEvent(BaseModel):
 
 
 class SchedulerJobRequest(BaseModel):
-    job_type: Literal["reminder", "timer", "date_night_check"]
+    job_type: Literal["reminder", "timer", "date_night_check", "email_summary"]
     payload: Dict[str, Any] = Field(default_factory=dict)
     run_at: Optional[str] = None
+
+
+class ExtractionActionRequest(BaseModel):
+    confirmation_type: Literal["pin"] = "pin"
+    confirmation_value: str
+
+
+class ExtractionActionResponse(BaseModel):
+    extraction_id: str
+    status: Literal["pending", "approved", "rejected", "expired"]
+    executed: bool
+    approval_id: Optional[str] = None
+
+
+class EmailSummaryView(BaseModel):
+    id: str
+    cadence: str
+    summary_text: str
+    period_start: str
+    period_end: str
+    created_at: str
+    message_count: int = 0
+
+
+class ExtractedEventView(BaseModel):
+    id: str
+    title: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    location: Optional[str] = None
+    confidence: float
+    status: Literal["pending", "approved", "rejected", "expired"]
+    raw_excerpt: str = ""
+    created_at: str
+    calendar_scope: str = "family_shared"
 
 
 class SchedulerJobResponse(BaseModel):
