@@ -7,7 +7,7 @@ services:
     environment:
       JARVIS_CONNECTORS_URL: http://connectors-google:8000
       JARVIS_SCHEDULER_URL: http://scheduler:8000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-jarvis}:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/${POSTGRES_DB:-jarvis}
+      DATABASE_URL: host=postgres port=5432 dbname=${POSTGRES_DB:-jarvis} user=${POSTGRES_USER:-jarvis} password=${POSTGRES_PASSWORD:-jarvis}
     # Internal-only: no host ports (reachable via Docker network / VPN host services).
     networks: [internal]
     depends_on: [postgres, redis, policy, connectors-google, scheduler]
@@ -40,10 +40,18 @@ services:
       dockerfile: services/scheduler/Dockerfile
     env_file: [.env]
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-jarvis}:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/${POSTGRES_DB:-jarvis}
+      DATABASE_URL: host=postgres port=5432 dbname=${POSTGRES_DB:-jarvis} user=${POSTGRES_USER:-jarvis} password=${POSTGRES_PASSWORD:-jarvis}
       JARVIS_SCHEDULER_AUTOTICK: ${JARVIS_SCHEDULER_AUTOTICK:-1}
       JARVIS_SCHEDULER_TICK_SECONDS: ${JARVIS_SCHEDULER_TICK_SECONDS:-5}
-    networks: [internal]
+      JARVIS_EMAIL_SUMMARY_CADENCE: ${JARVIS_EMAIL_SUMMARY_CADENCE:-daily}
+      JARVIS_EMAIL_SUMMARY_HOUR_LOCAL: ${JARVIS_EMAIL_SUMMARY_HOUR_LOCAL:-7}
+      JARVIS_EMAIL_MAILBOXES: ${JARVIS_EMAIL_MAILBOXES:-household}
+      JARVIS_EMAIL_GMAIL_QUERY: ${JARVIS_EMAIL_GMAIL_QUERY:-in:inbox newer_than:2d}
+      JARVIS_EMAIL_SCHOOL_SENDER_DOMAINS: ${JARVIS_EMAIL_SCHOOL_SENDER_DOMAINS:-}
+      JARVIS_EMAIL_SUMMARY_RETENTION_DAYS: ${JARVIS_EMAIL_SUMMARY_RETENTION_DAYS:-30}
+      JARVIS_EMAIL_EXTRACT_MIN_CONFIDENCE: ${JARVIS_EMAIL_EXTRACT_MIN_CONFIDENCE:-0.6}
+    # egress: Gmail/Calendar API calls from email_summary jobs.
+    networks: [internal, egress]
     depends_on: [postgres]
 
   connectors-google:
@@ -52,8 +60,14 @@ services:
       dockerfile: services/connectors_google/Dockerfile
     env_file: [.env]
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-jarvis}:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/${POSTGRES_DB:-jarvis}
-    networks: [internal]
+      DATABASE_URL: host=postgres port=5432 dbname=${POSTGRES_DB:-jarvis} user=${POSTGRES_USER:-jarvis} password=${POSTGRES_PASSWORD:-jarvis}
+      JARVIS_EMAIL_GMAIL_QUERY: ${JARVIS_EMAIL_GMAIL_QUERY:-in:inbox newer_than:2d}
+      JARVIS_EMAIL_SCHOOL_SENDER_DOMAINS: ${JARVIS_EMAIL_SCHOOL_SENDER_DOMAINS:-}
+      JARVIS_EMAIL_SUMMARY_RETENTION_DAYS: ${JARVIS_EMAIL_SUMMARY_RETENTION_DAYS:-30}
+      JARVIS_EMAIL_EXTRACT_MIN_CONFIDENCE: ${JARVIS_EMAIL_EXTRACT_MIN_CONFIDENCE:-0.6}
+      JARVIS_EMAIL_MAILBOXES: ${JARVIS_EMAIL_MAILBOXES:-household}
+    # egress: Google OAuth + Calendar/Tasks/Gmail APIs (Zone D). No host ports.
+    networks: [internal, egress]
     depends_on: [postgres]
 
   web:
@@ -65,9 +79,12 @@ services:
       JARVIS_CORE_URL: http://core:8000
       JARVIS_CONNECTORS_URL: http://connectors-google:8000
       JARVIS_SCHEDULER_URL: http://scheduler:8000
+      DATABASE_URL: host=postgres port=5432 dbname=${POSTGRES_DB:-jarvis} user=${POSTGRES_USER:-jarvis} password=${POSTGRES_PASSWORD:-jarvis}
+      JARVIS_EMAIL_SCHOOL_SENDER_DOMAINS: ${JARVIS_EMAIL_SCHOOL_SENDER_DOMAINS:-}
+      JARVIS_EMAIL_EXTRACT_MIN_CONFIDENCE: ${JARVIS_EMAIL_EXTRACT_MIN_CONFIDENCE:-0.6}
     # VPN-only surface: published on host for Tailscale/WireGuard access.
     ports: ["8006:8000"]
-    networks: [internal]
+    networks: [internal, private_access]
     depends_on: [core, connectors-google]
 
   postgres:
@@ -88,6 +105,9 @@ networks:
   internal:
     internal: true
   public:
+  private_access:
+  # Outbound-only style access for Google APIs; not attached to host-published routes.
+  egress:
 
 volumes:
   postgres_data:

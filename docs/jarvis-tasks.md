@@ -80,14 +80,16 @@
 - Notes: `scripts/jarvis_security_check.py`, ingress rate/body limits, `docs/ops-security-validation.md`.
 
 ## 6) Phase 2 - Priority Expansion
-### T4.1 Email summarization pipeline
+### T4.1 Email summarization pipeline — DONE
 - Add selected mailbox ingestion and summarization.
 - Acceptance: daily summaries generated with configurable cadence.
+- Notes: Gmail readonly OAuth scope, `email_messages`/`email_summaries` tables, scheduler `email_summary` job, VPN dashboard summary panel. Cadence via `JARVIS_EMAIL_SUMMARY_CADENCE` (`daily`|`weekdays`|`12h`).
 
-### T4.2 School-event extraction workflow
+### T4.2 School-event extraction workflow — DONE
 - Parse school emails for actionable events/reminders.
 - Require human confirmation before calendar writes.
 - Acceptance: extracted events are reviewable and acceptance rate is measurable.
+- Notes: heuristic `school_extract`, `extracted_events` review queue, PIN accept → calendar write via orchestrator, `/v1/extractions/stats` acceptance rate.
 
 ## 7) Cross-Cutting Engineering Tasks
 - Testing strategy:

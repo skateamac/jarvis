@@ -30,6 +30,10 @@ def reset_correlation(token: Token) -> None:
     _correlation_id.reset(token)
 
 
+def clear_correlation() -> None:
+    _correlation_id.set(None)
+
+
 def reset_service(token: Token) -> None:
     _service_name.reset(token)
 

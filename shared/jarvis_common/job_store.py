@@ -11,7 +11,7 @@ import psycopg.rows
 from shared.jarvis_common.db.connection import db_connection
 
 JobStatus = Literal["scheduled", "completed", "failed", "cancelled"]
-JobType = Literal["reminder", "timer", "date_night_check"]
+JobType = Literal["reminder", "timer", "date_night_check", "email_summary"]
 
 
 @dataclass

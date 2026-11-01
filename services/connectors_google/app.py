@@ -1,7 +1,6 @@
+import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict
-
-import logging
 
 from fastapi import FastAPI, HTTPException, Query
 
@@ -9,6 +8,7 @@ from shared.jarvis_common.config import settings
 from shared.jarvis_common.correlation import bind_correlation
 from shared.jarvis_common.db.connection import db_connection
 from shared.jarvis_common.db.migrate import apply_migrations
+from shared.jarvis_common.email_pipeline import run_email_pipeline
 from shared.jarvis_common.google_api import calendar_read as google_calendar_read
 from shared.jarvis_common.google_api import calendar_write as google_calendar_write
 from shared.jarvis_common.google_api import task_create as google_task_create
@@ -61,7 +61,7 @@ def oauth_callback(code: str, state: str) -> Dict[str, str]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail="Google token exchange failed.") from exc
+        raise HTTPException(status_code=502, detail=f"Google token exchange failed: {exc}") from exc
 
 
 @app.get("/internal/connectors/google/oauth/status")
@@ -107,4 +107,16 @@ def task_create(envelope: CommandEnvelope) -> Dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     log_event(logger, logging.INFO, "connector.task_create", extra={"request_id": envelope.request_id})
+    return result
+
+
+@app.post("/internal/connectors/google/email/pipeline")
+def email_pipeline(cadence: str | None = Query(default=None)) -> Dict[str, Any]:
+    result = run_email_pipeline(cadence=cadence)
+    log_event(
+        logger,
+        logging.INFO,
+        "connector.email_pipeline",
+        extra={"ingested": result.get("ingested"), "summary_id": result.get("summary_id")},
+    )
     return result

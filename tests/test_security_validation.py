@@ -156,9 +156,11 @@ def test_client_key_and_invalid_content_length(monkeypatch: pytest.MonkeyPatch) 
 def test_env_int_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JARVIS_ALEXA_RATE_LIMIT_PER_MINUTE", "not-int")
     monkeypatch.setenv("JARVIS_ALEXA_MAX_BODY_BYTES", "also-bad")
+    monkeypatch.setenv("JARVIS_EMAIL_EXTRACT_MIN_CONFIDENCE", "not-float")
     settings = Settings.from_env()
     assert settings.alexa_rate_limit_per_minute == 60
     assert settings.alexa_max_body_bytes == 262_144
+    assert settings.email_extract_min_confidence == 0.6
 
 
 def test_security_check_script() -> None:

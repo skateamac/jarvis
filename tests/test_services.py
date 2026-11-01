@@ -179,7 +179,15 @@ def test_alexa_webhook_invalid_request_type() -> None:
         "/alexa/webhook",
         json={"request": {"type": "LaunchRequest", "requestId": "alexa-2"}},
     )
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert "Jarvis here" in response.json()["response"]["outputSpeech"]["text"]
+
+    ended = client_alexa.post(
+        "/alexa/webhook",
+        json={"request": {"type": "SessionEndedRequest", "requestId": "alexa-3"}},
+    )
+    assert ended.status_code == 200
+    assert ended.json()["response"]["shouldEndSession"] is True
 
 
 def test_alexa_signature_required_when_not_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -650,7 +658,7 @@ def test_alexa_webhook_response_paths(monkeypatch: pytest.MonkeyPatch) -> None:
             "context": {"System": {"device": {"deviceId": "echo-1"}}},
         },
     )
-    assert "wrong" in failed.json()["response"]["outputSpeech"]["text"].lower()
+    assert "failed" in failed.json()["response"]["outputSpeech"]["text"].lower()
 
     def explode(envelope: CommandEnvelope) -> None:
         raise RuntimeError("core unavailable")
@@ -1042,11 +1050,12 @@ def test_scheduler_lifespan_with_database(monkeypatch: pytest.MonkeyPatch) -> No
         with patch("services.scheduler.app.db_connection") as db_conn:
             with patch("services.scheduler.app.apply_migrations") as migrate:
                 with patch("services.scheduler.app.ensure_date_night_job", return_value=None):
-                    db_conn.return_value.__enter__.return_value = object()
-                    db_conn.return_value.__exit__.return_value = None
-                    with TestClient(fresh_scheduler_app) as client:
-                        assert client.get("/health").json()["status"] == "ok"
-                    migrate.assert_called_once()
+                    with patch("services.scheduler.app.ensure_email_summary_job", return_value=None):
+                        db_conn.return_value.__enter__.return_value = object()
+                        db_conn.return_value.__exit__.return_value = None
+                        with TestClient(fresh_scheduler_app) as client:
+                            assert client.get("/health").json()["status"] == "ok"
+                        migrate.assert_called_once()
 
 
 def test_scheduler_autotick_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1081,9 +1090,10 @@ def test_scheduler_lifespan_autotick(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with patch("services.scheduler.app.process_due_jobs", side_effect=fake_process):
         with patch("services.scheduler.app.ensure_date_night_job", return_value=None):
-            with TestClient(fresh_scheduler_app) as client:
-                assert client.get("/health").json()["status"] == "ok"
-                time.sleep(0.15)
+            with patch("services.scheduler.app.ensure_email_summary_job", return_value=None):
+                with TestClient(fresh_scheduler_app) as client:
+                    assert client.get("/health").json()["status"] == "ok"
+                    time.sleep(0.15)
     assert calls["n"] >= 1
 
 

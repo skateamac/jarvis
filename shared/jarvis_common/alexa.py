@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
@@ -13,6 +14,11 @@ ALEXA_INTENT_MAP = {
     "AddTaskIntent": "add_task",
     "SetTimerIntent": "set_timer",
 }
+
+_ISO_DURATION = re.compile(
+    r"^P(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?)?$",
+    re.IGNORECASE,
+)
 
 # Kept for tests that rebind module-level settings.
 settings = config_module.settings
@@ -53,10 +59,27 @@ def _slot_value(slots: Dict[str, Any], name: str) -> Optional[str]:
     return str(value) if value is not None else None
 
 
+def alexa_request_type(payload: Dict[str, Any]) -> str:
+    request = payload.get("request", {})
+    return str(request.get("type") or "")
+
+
+def launch_response() -> Dict[str, Any]:
+    return alexa_response_for(
+        "Jarvis here. You can ask what's on today, add an event, add a task, or set a timer.",
+        end_session=False,
+    )
+
+
+def session_ended_response() -> Dict[str, Any]:
+    return {"version": "1.0", "response": {"shouldEndSession": True}}
+
+
 def parse_alexa_envelope(payload: Dict[str, Any]) -> CommandEnvelope:
     request = payload.get("request", {})
-    if request.get("type") != "IntentRequest":
-        raise ValueError("Unsupported Alexa request type.")
+    request_type = str(request.get("type") or "")
+    if request_type != "IntentRequest":
+        raise ValueError(f"Unsupported Alexa request type: {request_type or 'unknown'}")
 
     intent_data = request.get("intent", {})
     alexa_intent = str(intent_data.get("name", ""))
@@ -70,6 +93,11 @@ def parse_alexa_envelope(payload: Dict[str, Any]) -> CommandEnvelope:
         value = _slot_value(slots, key)
         if value is not None:
             parameters[key] = value
+
+    if intent_name == "set_timer":
+        seconds = _duration_to_seconds(parameters.get("duration"))
+        if seconds is not None:
+            parameters["seconds"] = seconds
 
     session = payload.get("session", {})
     user = session.get("user", {})
@@ -86,6 +114,24 @@ def parse_alexa_envelope(payload: Dict[str, Any]) -> CommandEnvelope:
         intent=Intent(name=intent_name, parameters=parameters),
         context=Context(),
     )
+
+
+def _duration_to_seconds(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    raw = str(value).strip()
+    if raw.isdigit():
+        return int(raw)
+    match = _ISO_DURATION.match(raw)
+    if not match:
+        return None
+    days = int(match.group("days") or 0)
+    hours = int(match.group("hours") or 0)
+    minutes = int(match.group("minutes") or 0)
+    seconds = int(match.group("seconds") or 0)
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
 def alexa_response_for(command_message: str, *, end_session: bool = False) -> Dict[str, Any]:

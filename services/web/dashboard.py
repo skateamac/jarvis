@@ -75,6 +75,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     .item:last-child { padding-bottom: 0; }
     .title { font-weight: 560; margin: 0 0 0.25rem; }
     .meta { color: var(--muted); font-size: 0.85rem; margin: 0; }
+    .summary-body {
+      white-space: pre-wrap;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      margin: 0.35rem 0 0;
+    }
     .actions {
       display: flex;
       gap: 0.5rem;
@@ -143,7 +149,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <body>
   <header>
     <h1>Jarvis</h1>
-    <p>Household timeline, approvals, and today’s schedule</p>
+    <p>Household timeline, approvals, email, and today’s schedule</p>
   </header>
   <main>
     <div class="toolbar">
@@ -154,6 +160,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <section>
       <h2>Pending approvals</h2>
       <div class="panel" id="approvals"><p class="empty">Loading…</p></div>
+    </section>
+
+    <section>
+      <h2>School events</h2>
+      <div class="panel" id="extractions"><p class="empty">Loading…</p></div>
+    </section>
+
+    <section>
+      <h2>Email summary</h2>
+      <div class="panel" id="email-summary"><p class="empty">Loading…</p></div>
     </section>
 
     <section>
@@ -216,6 +232,52 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       }).join("");
     }
 
+    async function loadExtractions() {
+      const [pendingRes, statsRes] = await Promise.all([
+        fetch("/v1/extractions/pending"),
+        fetch("/v1/extractions/stats"),
+      ]);
+      const pending = await pendingRes.json();
+      const stats = await statsRes.json();
+      const root = document.getElementById("extractions");
+      const rate = stats.acceptance_rate == null
+        ? "n/a"
+        : `${Math.round(stats.acceptance_rate * 100)}%`;
+      const statsLine = `<p class="meta">Accepted ${stats.approved || 0} · Rejected ${stats.rejected || 0} · Rate ${rate}</p>`;
+      if (!pending.length) {
+        root.innerHTML = `${statsLine}<p class="empty">No school events awaiting review.</p>`;
+        return;
+      }
+      root.innerHTML = statsLine + pending.map((item) => `
+        <div class="item" data-extraction="${escapeHtml(item.id)}">
+          <p class="title">${escapeHtml(item.title)}</p>
+          <p class="meta">${escapeHtml(item.start_time || "time TBD")} · confidence ${escapeHtml(item.confidence)} · ${escapeHtml(item.raw_excerpt || "")}</p>
+          <div class="actions">
+            <input type="password" inputmode="numeric" maxlength="8" placeholder="PIN" aria-label="Confirmation PIN" />
+            <button class="approve" type="button" data-action="accept">Accept</button>
+            <button class="reject" type="button" data-action="reject">Reject</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    async function loadEmailSummary() {
+      const res = await fetch("/v1/email/summaries?limit=1");
+      const summaries = await res.json();
+      const root = document.getElementById("email-summary");
+      if (!summaries.length) {
+        root.innerHTML = '<p class="empty">No email summaries yet.</p>';
+        return;
+      }
+      const item = summaries[0];
+      root.innerHTML = `
+        <div class="item">
+          <p class="title">${escapeHtml(item.cadence)} · ${escapeHtml(item.message_count)} messages</p>
+          <p class="meta">${escapeHtml(item.created_at)}</p>
+          <p class="summary-body">${escapeHtml(item.summary_text)}</p>
+        </div>`;
+    }
+
     async function loadSchedule() {
       const res = await fetch(`/v1/calendar/day?date=${todayIso()}`);
       const data = await res.json();
@@ -253,7 +315,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       const state = document.getElementById("sync-state");
       state.textContent = "syncing";
       try {
-        await Promise.all([loadApprovals(), loadSchedule(), loadTimeline()]);
+        await Promise.all([
+          loadApprovals(),
+          loadExtractions(),
+          loadEmailSummary(),
+          loadSchedule(),
+          loadTimeline(),
+        ]);
         state.textContent = "live";
       } catch (err) {
         state.textContent = "error";
@@ -286,6 +354,36 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           const res = await fetch(`/v1/approvals/${approvalId}/reject`, { method: "POST" });
           if (!res.ok) throw new Error("Reject failed");
           toast("Rejected");
+        }
+        await refresh();
+      } catch (err) {
+        toast(err.message || "Action failed");
+      }
+    });
+
+    document.getElementById("extractions").addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const item = button.closest("[data-extraction]");
+      const extractionId = item.dataset.extraction;
+      const action = button.dataset.action;
+      try {
+        if (action === "accept") {
+          const pin = item.querySelector('input[type="password"]').value;
+          const res = await fetch(`/v1/extractions/${extractionId}/accept`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ confirmation_type: "pin", confirmation_value: pin }),
+          });
+          if (!res.ok) {
+            const detail = await res.json().catch(() => ({}));
+            throw new Error(detail.detail || "Accept failed");
+          }
+          toast("School event accepted");
+        } else {
+          const res = await fetch(`/v1/extractions/${extractionId}/reject`, { method: "POST" });
+          if (!res.ok) throw new Error("Reject failed");
+          toast("School event rejected");
         }
         await refresh();
       } catch (err) {

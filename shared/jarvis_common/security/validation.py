@@ -52,11 +52,13 @@ def validate_compose_exposure(compose_text: str) -> List[SecurityCheck]:
     )
 
     web_block = _service_block(compose_text, "web")
+    web_networks = re.search(r"^\s+networks:\s*\[(.*?)\]", web_block, flags=re.MULTILINE)
+    web_network_list = [part.strip() for part in web_networks.group(1).split(",")] if web_networks else []
     checks.append(
         SecurityCheck(
             check_id="network.web_internal",
             name="Dashboard bound to internal network",
-            passed="public" not in web_block and bool(re.search(r"ports:", web_block)),
+            passed="public" not in web_network_list and bool(re.search(r"ports:", web_block)),
             detail="Web publishes host port for VPN access but stays off the public Docker network.",
         )
     )

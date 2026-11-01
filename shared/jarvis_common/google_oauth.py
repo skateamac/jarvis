@@ -15,6 +15,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_SCOPES = (
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/tasks",
+    "https://www.googleapis.com/auth/gmail.readonly",
 )
 
 
@@ -94,13 +95,23 @@ def get_access_token(account_key: str = "household") -> str:
 
 
 def _post_token(payload: Dict[str, str]) -> Dict[str, Any]:
-    with httpx.Client(timeout=15.0) as client:
-        response = client.post(GOOGLE_TOKEN_URL, data=payload)
-        response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, dict):
-            raise ValueError("Invalid token response.")
-        return data
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            response = client.post(GOOGLE_TOKEN_URL, data=payload)
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPStatusError as exc:
+        body = ""
+        if exc.response is not None:
+            body = (exc.response.text or "").strip()
+        raise ValueError(
+            f"Google token exchange rejected ({exc.response.status_code if exc.response else '?'}): {body or exc}"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise ValueError(f"Google token endpoint unreachable: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Invalid token response.")
+    return data
 
 
 def _save_token(account_key: str, token_data: Dict[str, Any]) -> OAuthTokenRecord:

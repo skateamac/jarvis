@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Dict, List
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import httpx2 as httpx
 
 from shared.jarvis_common.config import settings
 from shared.jarvis_common.google_oauth import get_access_token, oauth_status
+from shared.jarvis_common.logging import get_logger, log_event
 from shared.jarvis_common.models import CommandEnvelope
 
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
@@ -20,6 +23,8 @@ LIST_MAP = {
     "personal": "google_tasks_list_personal",
 }
 
+logger = get_logger("jarvis.google_api")
+
 
 def calendar_read(envelope: CommandEnvelope) -> Dict[str, Any]:
     if not oauth_status(settings.google_account_key).get("connected"):
@@ -30,14 +35,28 @@ def calendar_read(envelope: CommandEnvelope) -> Dict[str, Any]:
     start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
     end = start + timedelta(days=1)
     events: List[Dict[str, Any]] = []
+    errors: List[Dict[str, str]] = []
     for scope in READ_SCOPES:
         calendar_id = _calendar_id(scope)
         if not calendar_id:
             continue
-        for item in _list_events(calendar_id, start, end, tz):
-            events.append(_normalize_event(item, scope))
-    events.sort(key=lambda event: event["start_time"])
-    return {"date": day.isoformat(), "events": events, "source": "google_calendar_api"}
+        try:
+            for item in _list_events(calendar_id, start, end, tz):
+                events.append(_normalize_event(item, scope))
+        except Exception as exc:  # noqa: BLE001
+            detail = str(exc)
+            errors.append({"calendar_scope": scope, "calendar_id": calendar_id, "error": detail})
+            log_event(
+                logger,
+                logging.WARNING,
+                "google.calendar_read.skip",
+                extra={"calendar_scope": scope, "calendar_id": calendar_id, "error": detail},
+            )
+    events.sort(key=lambda event: event["start_time"] or "")
+    result: Dict[str, Any] = {"date": day.isoformat(), "events": events, "source": "google_calendar_api"}
+    if errors:
+        result["errors"] = errors
+    return result
 
 
 def calendar_write(envelope: CommandEnvelope) -> Dict[str, Any]:
@@ -52,7 +71,8 @@ def calendar_write(envelope: CommandEnvelope) -> Dict[str, Any]:
     if not calendar_id:
         raise ValueError(f"Calendar not configured for scope: {scope}")
     payload = _event_payload(envelope, scope)
-    created = _api_post(f"{CALENDAR_API}/calendars/{calendar_id}/events", payload)
+    encoded_id = quote(calendar_id, safe="")
+    created = _api_post(f"{CALENDAR_API}/calendars/{encoded_id}/events", payload)
     return {
         "event_id": created.get("id", "unknown"),
         "status": "created",
@@ -173,7 +193,8 @@ def _list_events(calendar_id: str, start: datetime, end: datetime, tz: ZoneInfo)
         "singleEvents": "true",
         "orderBy": "startTime",
     }
-    data = _api_get(f"{CALENDAR_API}/calendars/{calendar_id}/events", params=params)
+    encoded_id = quote(calendar_id, safe="")
+    data = _api_get(f"{CALENDAR_API}/calendars/{encoded_id}/events", params=params)
     return list(data.get("items", []))
 
 

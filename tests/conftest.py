@@ -5,7 +5,9 @@ import httpx2
 import pytest
 
 from shared.jarvis_common.config import Settings
+from shared.jarvis_common.correlation import clear_correlation
 from shared.jarvis_common.db.oauth_store import oauth_token_store
+from shared.jarvis_common.email_store import email_store
 from shared.jarvis_common.ingress_guard import reset_rate_limiter
 from shared.jarvis_common.job_store import job_store
 from shared.jarvis_common.stores import approval_store, audit_store
@@ -24,7 +26,9 @@ def reset_stores() -> None:
     audit_store.clear()
     oauth_token_store.clear()
     job_store.clear()
+    email_store.clear()
     reset_rate_limiter()
+    clear_correlation()
 
 
 @pytest.fixture(autouse=True)

@@ -19,6 +19,7 @@ from shared.jarvis_common.models import CommandEnvelope, SchedulerJobRequest, Sc
 from shared.jarvis_common.scheduler_engine import (
     create_job,
     ensure_date_night_job,
+    ensure_email_summary_job,
     parse_run_at,
     process_due_jobs,
     schedule_from_envelope,
@@ -54,6 +55,7 @@ async def lifespan(app: FastAPI):
         with db_connection() as conn:
             apply_migrations(conn)
     ensure_date_night_job()
+    ensure_email_summary_job()
     if _autotick_enabled():
         _tick_task = asyncio.create_task(_tick_loop())
     yield
